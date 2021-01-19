@@ -1,6 +1,6 @@
 #ifndef Renderable2D_H
 #define Renderable2D_H
-#include "libs.h"
+#include <glm.hpp>
 
 struct Texture {
 	unsigned char* image;

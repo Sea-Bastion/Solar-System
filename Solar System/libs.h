@@ -1,4 +1,6 @@
 #pragma once
+//todo remove this files and stop being lazy
+
 #include<iostream>
 #include<fstream>
 #include<string>

@@ -1,4 +1,7 @@
 #include "libs.h"
+#include "Window.h"
+#include <chrono>
+#include <gtx/matrix_transform_2d.hpp>
 
 const Vertex Vertices[] = {
 	glm::vec3(-50.f, 50.f, 0.0f),		glm::vec2(0.f, 1.f),
@@ -12,18 +15,6 @@ GLuint Indices[] = {
 	0, 1, 2, 0, 2, 3
 };
 unsigned IndiceCount = sizeof(Indices) / sizeof(GLuint);
-
-const int DELTA = 1 / 60;
-
-void frame_buffer_resize_callback(GLFWwindow* window, int framebufferWidth, int framebufferHight)
-{
-	glViewport(0, 0, framebufferWidth, framebufferHight);
-
-	//set update to shader
-	float screen_size[] = { framebufferWidth, framebufferHight };
-	glUniform2fv(4, 1, screen_size);
-
-}
 
 bool loadShaders(GLint &program)
 {
@@ -136,10 +127,8 @@ bool loadShaders(GLint &program)
 	return returnVal;
 }
 
-void updateInput(GLFWwindow* window)
-{
-	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-		glfwSetWindowShouldClose(window, GLFW_TRUE);
+void updateInput(GLFWwindow* window) {
+
 }
 
 int main() 
@@ -150,47 +139,17 @@ int main()
 	glfwInit();
 
 	//make window
-	const int WINDOW_WIDTH = 640;
-	const int WINDOW_HIGHT = 480;
-	//int framebufferWidth = 0;
-	//int framebufferHight = 0;
-
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
-	glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
-
-	GLFWwindow* window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HIGHT, "Solar System", NULL, NULL);
-	glfwSetFramebufferSizeCallback(window, frame_buffer_resize_callback);
-
-	//make context
-	glfwMakeContextCurrent(window);
-
-
-	//init glew
-	glewExperimental = GL_TRUE;
-	if (glewInit() != GLEW_OK) 
-	{
-		std::cout << "FAILED TO INIT GLEW" << std::endl;
+	try {
+		Window::Init("Solar System", glm::vec2(800, 600));
+	}
+	catch (std::string e){
+		std::cout << "FAILED TO INIT WINDOW: " << e << std::endl;
 		glfwTerminate();
 		return 1;
 	}
 
-	//enable options
-	glEnable(GL_DEPTH_TEST);
-
-	glEnable(GL_CULL_FACE);
-	glCullFace(GL_BACK);
-	glFrontFace(GL_CCW);
-
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-	//normal
-	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-	//wireframe
-	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
+	Window* window = Window::getInstance();
+	
 
 	//------------------SHADERS-------------------------
 	GLint core_program;
@@ -225,9 +184,6 @@ int main()
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)offsetof(Vertex, position));
 	glEnableVertexAttribArray(0);
 
-	//glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)offsetof(Vertex, color));
-	//glEnableVertexAttribArray(1);
-
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)offsetof(Vertex, texcoord));
 	glEnableVertexAttribArray(1);
 
@@ -252,7 +208,7 @@ int main()
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	}
 	else {
 		std::cout << "FAILED TO LOAD TEXTURE" << std::endl;
@@ -265,26 +221,27 @@ int main()
 
 
 	//-------------free--------------
-	glm::vec4 translation = glm::vec4(0.0f);
-	glm::mat4 rotation = glm::rotate(glm::mat4(1.f), 0.f, glm::vec3(0.0f, 0.0f, 1.0f));
+	glm::vec3 translation(0.0f);
+	glm::mat3 rotation = glm::rotate(glm::mat3(1), 0.f);
+	glm::mat3 scale = glm::scale(glm::mat3(1), glm::vec2(1));
 
 
 	//--------------------MAIN LOOP------------------------
-	bool loop = true;
-	while (!glfwWindowShouldClose(window))
-	{
-		int endTime = std::clock() + DELTA;
+	using clock = std::chrono::steady_clock;
+	const std::chrono::milliseconds FRAMETIME(16);
+	auto startTime = clock::now();
+	while ( !glfwWindowShouldClose(window->getID()) ) {
 
+		//get delta
+		auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - startTime).count();
+		startTime = clock::now();
 
 		//UPDATE INPUT-----------
 		glfwPollEvents();
-		updateInput(window);
+		//updateInput(window->getID());
 
 
 		//------------------------------UPDATE OBJ-----------------------------
-		if (false) {
-			//do things later
-		}
 
 
 		//DRAW-------------------
@@ -303,22 +260,34 @@ int main()
 		//bind draw data
 		glBindVertexArray(VAO);
 
-		//draw
+		//give point translations
+		translation = glm::vec3(window->getViewport(), 0.f);
+		scale = glm::scale(glm::mat3(1), glm::vec2(window->getViewscale()));
 		glUniform3fv(2, 1, glm::value_ptr(translation));
-		glUniformMatrix4fv(3, 1, GL_FALSE, glm::value_ptr(rotation));
+		glUniformMatrix3fv(3, 1, GL_FALSE, glm::value_ptr(rotation));
+		glUniformMatrix3fv(4, 1, GL_FALSE, glm::value_ptr(scale));
+		glUniform2fv(5, 1, glm::value_ptr(window->getSize()));
 		
 		//glDrawArrays(GL_TRIANGLES, 0, VertexCount);
 		glDrawElements(GL_TRIANGLES, IndiceCount, GL_UNSIGNED_INT, 0);
 
 		//end draw
-		glfwSwapBuffers(window);
+		glfwSwapBuffers(window->getID());
 		glFlush();
+
+		//sleep till next frame
+		auto renderTime = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - startTime);
+		if (renderTime <= FRAMETIME) {
+			std::this_thread::sleep_for(FRAMETIME - renderTime);
+		} 
+		else {
+			std::cout << "WARNING: FRAMES QUEUED" << std::endl;
+		}
 
 	}
 	
 	//cleanup
-	glfwDestroyWindow(window);
-	glfwTerminate();
+	Window::DestroyWindow();
 	glDeleteProgram(core_program);
 
 
